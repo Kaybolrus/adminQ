@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <!-- Чистый net8.0 без WPF: позволяет проверить компиляцию моделей и сервисов на Linux/macOS. -->
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Models/*.cs" />
+    <Compile Include="Services/Validation.cs" />
+    <Compile Include="Services/DataService.cs" />
+    <Compile Include="Services/AvailabilityMonitor.cs" />
+  </ItemGroup>
+
+</Project>
