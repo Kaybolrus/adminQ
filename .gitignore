@@ -1,5 +1,5 @@
-bin/
-obj/
-obj_core/
-.vscode/
-.idea/
+*.bundle
+
+# Артефакты сборки .NET — не являются частью исходного кода
+[Bb]in/
+[Oo]bj/
