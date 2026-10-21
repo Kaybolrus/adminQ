@@ -1,1 +1,5 @@
-(empty output)
+bin/
+obj/
+obj_core/
+.vscode/
+.idea/

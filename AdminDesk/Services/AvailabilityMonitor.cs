@@ -63,6 +63,35 @@ public sealed class AvailabilityMonitor : IAsyncDisposable
         {
             // Штатная остановка при закрытии приложения.
         }
+        catch (Exception ex)
+        {
+            // Непредвиденная ошибка цикла (например, getDevices бросил исключение).
+            // Цикл завершился — молча глотать это нельзя: иначе мониторинг «умрёт» без симптомов.
+            // Логируем в error.log рядом с данными и поднимаем событие для уведомления UI.
+            TryLogCycleFailure(ex);
+            CycleFaulted?.Invoke(ex);
+        }
+    }
+
+    /// <summary>Вызывается, если цикл мониторинга аварийно завершился. Позволяет ViewModel
+    /// показать понятное сообщение вместо молчаливого «зависших» статусов «Проверка».</summary>
+    public event Action<Exception>? CycleFaulted;
+
+    private static void TryLogCycleFailure(Exception ex)
+    {
+        try
+        {
+            string logPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "AdminDesk", "error.log");
+            Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
+            File.AppendAllText(logPath,
+                $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} Monitor cycle faulted: {ex}\r\n");
+        }
+        catch
+        {
+            // Если лог записать не удалось, событие CycleFaulted всё равно уведомит пользователя.
+        }
     }
 
     private async Task CheckOneAsync(Models.DeviceEntry device,
@@ -94,10 +123,11 @@ public sealed class AvailabilityMonitor : IAsyncDisposable
             }
 
             // onResult marshalит обновление свойств на UI-поток (см. MainViewModel).
-            // ct.CanBeCanceled == false — проверка завершилась до остановки приложения:
+            // ct.IsCancellationRequested == false — проверка завершилась ДО остановки приложения:
             // фиксируем результат. Если остановка уже запрошена — окно закрывается,
-            // обновлять ничего не нужно.
-            if (!ct.CanBeCanceled)
+            // обновлять ничего не нужно. (Раньше здесь было ошибочное !ct.CanBeCanceled —
+            // коллбэк не вызывался никогда, мониторинг не обновлял статусы.)
+            if (!ct.IsCancellationRequested)
                 onResult(device, reachable, DateTime.Now);
         }
         catch (OperationCanceledException)
@@ -108,7 +138,7 @@ public sealed class AvailabilityMonitor : IAsyncDisposable
         {
             // Любая непредвиденная ошибка проверки (например, разрешение имени) трактуется как «нет ответа»,
             // но приложение не падает. Это осознанное решение: единичный сбой сети не должен закрывать программу.
-            if (!ct.CanBeCanceled)
+            if (!ct.IsCancellationRequested)
                 onResult(device, false, DateTime.Now);
         }
         finally

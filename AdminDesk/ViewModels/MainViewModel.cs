@@ -353,6 +353,12 @@ public class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     /// <summary>Запускает цикл мониторинга. Первая волна проверок стартует сразу, без ожидания минуты.</summary>
     public void StartMonitoring()
     {
+        // Если цикл мониторинга аварийно завершится, пользователь узнает об этом,
+        // а не будет смотреть на вечно «проверяющиеся» статусы (ТЗ: не подавлять ошибки молча).
+        _monitor.CycleFaulted += ex => PostMessage(
+            "Мониторинг доступности остановлен из-за непредвиденной ошибки: " + ex.Message +
+            "\nПодробности: %AppData%\\AdminDesk\\error.log", MessageBoxImage.Warning);
+
         _monitor.Start(
             getDevicesToCheck: () => Devices.ToList(),
             onResult: (device, reachable, time) =>
