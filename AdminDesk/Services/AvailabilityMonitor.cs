@@ -1,4 +1,7 @@
 using System.Collections.Concurrent;
+using System.IO; // Path/Directory/File — нужны для журнала ошибок мониторинга;
+                 // в WPF-проекте имя Path конфликтует с System.Windows.Shapes.Path,
+                 // поэтому далее используется полностью квалифицированное System.IO.Path
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 

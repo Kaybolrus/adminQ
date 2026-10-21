@@ -23,6 +23,11 @@
     <!-- Не тянуть файлы служебного проекта Core в основной -->
     <Compile Remove="obj_core/**" />
     <None Remove="obj_core/**" />
+    <!-- Тестовый раннер — отдельный проект Tests/AdminDesk.Tests.csproj.
+         В состав WPF-EXE не входит (иначе Program.cs с top-level statements
+         попал бы в сборку и вызвал конфликты имён). -->
+    <Compile Remove="Tests/**" />
+    <None Remove="Tests/**" />
   </ItemGroup>
 
 </Project>
