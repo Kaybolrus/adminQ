@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyTitle>Admin Desk</AssemblyTitle>
+    <Product>Admin Desk</Product>
+    <Version>1.0.0</Version>
+    <!-- Приложение не требует прав администратора -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Позволяет выполнять restore/build проектов с TFM *-windows и на не-Windows ОС
+         (проверка компиляции в CI). На Windows сборка идёт в обычном режиме.
+         Запуск готового WPF-приложения возможен только на Windows. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <!-- WPF собирается только на Windows. Отдельный проект AdminDesk.Core.csproj
+         (чистый net8.0) позволяет проверить компиляцию моделей и сервисов на Linux/macOS. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Не тянуть файлы служебного проекта Core в основной -->
+    <Compile Remove="obj_core/**" />
+    <None Remove="obj_core/**" />
+    <!-- Тестовый раннер — отдельный проект Tests/AdminDesk.Tests.csproj.
+         В состав WPF-EXE не входит (иначе Program.cs с top-level statements
+         попал бы в сборку и вызвал конфликты имён). -->
+    <Compile Remove="Tests/**" />
+    <None Remove="Tests/**" />
+  </ItemGroup>
+
+</Project>

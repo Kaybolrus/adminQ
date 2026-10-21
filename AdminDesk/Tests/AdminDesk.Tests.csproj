@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Тестируемая логика: те же файлы, что компилирует AdminDesk.Core.csproj -->
+    <Compile Include="../Models/*.cs" />
+    <Compile Include="../Services/Validation.cs" />
+    <Compile Include="../Services/DataService.cs" />
+    <Compile Include="../Services/AvailabilityMonitor.cs" />
+    <Compile Include="Program.cs" />
+  </ItemGroup>
+
+</Project>
