@@ -33,10 +33,16 @@ public class DataService
     public string FilePath => _filePath;
 
     public DataService()
+        : this(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AdminDesk"))
     {
         // AppData текущего пользователя — гарантированно доступен на запись без прав администратора.
-        _directory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AdminDesk");
+    }
+
+    /// <summary>Конструктор для модульных тестов: явный каталог данных вместо AppData.</summary>
+    public DataService(string directory)
+    {
+        _directory = directory;
         _filePath = Path.Combine(_directory, "data.json");
         _tempPath = Path.Combine(_directory, "data.json.tmp");
         _backupPath = Path.Combine(_directory, "data.backup.json");
@@ -50,6 +56,9 @@ public class DataService
         public AppData Data { get; init; } = new();
         /// <summary>true — основной файл отсутствовал или не читался; использованы стартовые/резервные данные.</summary>
         public bool CorruptedOrMissing { get; init; }
+        /// <summary>true — файл данных существует, но не читается (блокировка/права).
+        /// Приложение должно работать без записи, чтобы не перезаписать возможные целые данные пользователя.</summary>
+        public bool ReadOnlyMode { get; init; }
         /// <summary>Текст понятного сообщения об ошибке для пользователя (null, если всё в порядке).</summary>
         public string? Message { get; init; }
     }
@@ -71,54 +80,132 @@ public class DataService
             };
         }
 
-        if (!File.Exists(_filePath))
-        {
-            // Файла ещё нет — первое запускаем со стартовыми записями и сразу сохраняем.
-            var seed = CreateSeedData();
-            Save(seed);
-            return new LoadResult { Data = seed };
-        }
-
+        bool fileExists;
         try
         {
-            var json = File.ReadAllText(_filePath);
-            var data = JsonSerializer.Deserialize<AppData>(json, JsonOptions);
-            if (data == null || data.Devices == null || data.Folders == null)
-                throw new InvalidDataException("Файл данных не содержит ожидаемой структуры.");
-
-            // Нормализуем порядок папок, если он был сломан ручным редактированием.
-            NormalizeFolderOrder(data);
-            return new LoadResult { Data = data };
+            fileExists = File.Exists(_filePath);
         }
         catch (Exception ex)
         {
-            // Повреждённый файл НЕ удаляем и НЕ перезаписываем молча: сохраняем копию для восстановления.
-            string damagedCopyPath = TryPreserveDamagedFile();
-
-            // Пробуем восстановить данные из резервной копии.
-            var fromBackup = TryLoadBackup();
-            if (fromBackup != null)
-            {
-                return new LoadResult
-                {
-                    Data = fromBackup,
-                    CorruptedOrMissing = true,
-                    Message = $"Основной файл данных повреждён ({ex.Message})." +
-                              (damagedCopyPath != null ? $" Повреждённая копия сохранена: {damagedCopyPath}." : "") +
-                              " Данные восстановлены из резервной копии."
-                };
-            }
-
             return new LoadResult
             {
                 Data = CreateSeedData(),
                 CorruptedOrMissing = true,
-                Message = $"Основной файл данных повреждён ({ex.Message})," +
-                          " а резервная копия отсутствует или тоже повреждена." +
-                          (damagedCopyPath != null ? $" Повреждённая копия сохранена: {damagedCopyPath}." : "") +
-                          " Использованы стартовые записи."
+                Message = $"Не удалось проверить файл данных: {ex.Message}. Будут использованы стартовые записи (без сохранения)."
             };
         }
+
+        if (!fileExists)
+        {
+            // Файла ещё нет — первый запуск: используем стартовые записи и сразу сохраняем.
+            var seed = CreateSeedData();
+            var firstSaveError = Save(seed);
+            return new LoadResult
+            {
+                Data = seed,
+                CorruptedOrMissing = firstSaveError != null,
+                Message = firstSaveError == null
+                    ? null
+                    : firstSaveError + " Изменения не будут сохранены до устранения проблемы."
+            };
+        }
+
+        AppData? data = null;
+        string? loadError = null;
+        Exception? lastFailure = null; // тип исключения нужен для различения «повреждён»/«недоступен»
+        bool loadedAfterRetry = false;
+        for (int attempt = 1; attempt <= 3 && data == null; attempt++)
+        {
+            try
+            {
+                var json = File.ReadAllText(_filePath);
+                data = JsonSerializer.Deserialize<AppData>(json, JsonOptions);
+                if (data == null || data.Devices == null || data.Folders == null)
+                    throw new InvalidDataException("Файл данных не содержит ожидаемой структуры.");
+                loadedAfterRetry = attempt > 1;
+            }
+            catch (Exception ex)
+            {
+                lastFailure = ex;
+                loadError = ex.Message;
+                // Краткая пауза между попытками: временная блокировка антивирусом обычно снимается быстро.
+                if (attempt < 3)
+                {
+                    Thread.Sleep(150 * attempt);
+                }
+            }
+        }
+
+        if (data != null)
+        {
+            NormalizeFolderOrder(data);
+            // Данные пользователя прочитаны — это главный сценарий. Если файл удалось открыть
+            // только со второй-третьей попытки, честно предупреждаем (без потери его данных).
+            string? retryNote = loadedAfterRetry
+                ? "Файл данных открылся не с первой попытки (возможна временная блокировка другим процессом)." +
+                  " Данные загружены полностью."
+                : null;
+            return new LoadResult
+            {
+                Data = data,
+                CorruptedOrMissing = loadedAfterRetry,
+                Message = retryNote
+            };
+        }
+
+        // Чтение не удалось. Определяем характер проблемы по типу исключения, а не по тексту
+        // (сообщения System.Text.Json зависят от культуры ОС и локализации не гарантированы):
+        //  - JsonException / InvalidDataException — файл повреждён;
+        //  - IOException / UnauthorizedAccessException — файл недоступен (блокировка, права),
+        //    данные пользователя при этом целы.
+        bool isCorruption = lastFailure is JsonException or InvalidDataException;
+
+        if (!isCorruption)
+        {
+            return new LoadResult
+            {
+                Data = CreateSeedData(),
+                CorruptedOrMissing = true,
+                ReadOnlyMode = true,
+                Message = $"Не удалось прочитать файл данных ({loadError})." +
+                          " Возможна временная блокировка файла антивирусом или другим процессом." +
+                          " Приложение работает со стартовыми записями в режиме БЕЗ СОХРАНЕНИЯ," +
+                          " чтобы не перезаписать ваш файл. Закройте приложение и повторите попытку."
+            };
+        }
+
+        // Основной файл повреждён. Сохраняем его копию для последующего ручного восстановления,
+        // сам повреждённый файл НЕ удаляем и НЕ перезаписываем молча.
+        string? damagedCopyPath = TryPreserveDamagedFile();
+
+        // Пробуем восстановить данные из резервной копии.
+        var fromBackup = TryLoadBackup();
+        if (fromBackup != null)
+        {
+            return new LoadResult
+            {
+                Data = fromBackup,
+                CorruptedOrMissing = true,
+                Message = $"Основной файл данных повреждён ({loadError})." +
+                          (damagedCopyPath != null ? $" Повреждённая копия сохранена: {damagedCopyPath}." : "") +
+                          " Данные восстановлены из резервной копии."
+            };
+        }
+
+        // Резервная копия отсутствует или тоже повреждена. Молча подменять данные стартовыми
+        // записями нельзя: пользователь может потерять записи при первом же сохранении.
+        // Поэтому запускаемся со стартовыми записями, но в режиме БЕЗ СОХРАНЕНИЯ (ReadOnlyMode).
+        return new LoadResult
+        {
+            Data = CreateSeedData(),
+            CorruptedOrMissing = true,
+            ReadOnlyMode = true,
+            Message = $"Основной файл данных повреждён ({loadError})," +
+                      " а резервная копия отсутствует или тоже повреждена." +
+                      (damagedCopyPath != null ? $" Повреждённая копия сохранена: {damagedCopyPath}." : "") +
+                      " Показаны стартовые записи в режиме БЕЗ СОХРАНЕНИЯ: ваши данные не будут" +
+                      " перезаписаны, пока вы не восстановите файл вручную (например, из копии .damaged-*)."
+        };
     }
 
     /// <summary>

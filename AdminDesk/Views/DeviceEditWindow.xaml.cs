@@ -55,7 +55,9 @@ public partial class DeviceEditWindow : Window
         var existing = (Application.Current.MainWindow?.DataContext as ViewModels.MainViewModel)?.Devices
                        ?? Enumerable.Empty<DeviceEntry>();
 
-        string? error = Validation.ValidateDevice(_device, existing);
+        // Полное имя — обязательно: в WPF-проекте System.Windows.Controls.Validation
+        // конфликтует с AdminDesk.Services.Validation (CS0104).
+        string? error = Services.Validation.ValidateDevice(_device, existing);
         if (error != null)
         {
             ErrorText.Text = error;

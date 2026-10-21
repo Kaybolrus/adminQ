@@ -11,6 +11,10 @@
     <Version>1.0.0</Version>
     <!-- Приложение не требует прав администратора -->
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Позволяет выполнять restore/build проектов с TFM *-windows и на не-Windows ОС
+         (проверка компиляции в CI). На Windows сборка идёт в обычном режиме.
+         Запуск готового WPF-приложения возможен только на Windows. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <!-- WPF собирается только на Windows. Отдельный проект AdminDesk.Core.csproj
          (чистый net8.0) позволяет проверить компиляцию моделей и сервисов на Linux/macOS. -->
   </PropertyGroup>

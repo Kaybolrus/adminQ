@@ -25,11 +25,12 @@ public static class ExternalLauncher
         var psi = new ProcessStartInfo
         {
             FileName = "mstsc.exe",
-            // mstsc.exe принимает адрес как отдельный аргумент после /v: — shell не используется.
-            Arguments = $"/v:{address}",
             UseShellExecute = false,
             CreateNoWindow = false
         };
+        // Аргументы передаются отдельными элементами (без shell-обработки): адрес устройства
+        // попадает строго в параметр /v: и не может «склеиться» с произвольной командой.
+        psi.ArgumentList.Add("/v:" + address);
 
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException("Не удалось запустить mstsc.exe.");
@@ -49,14 +50,16 @@ public static class ExternalLauncher
         var psi = new ProcessStartInfo
         {
             FileName = "explorer.exe",
-            // explorer.exe получает путь как аргумент напрямую (без shell-обработки).
-            Arguments = $"\"{path}\"",
             UseShellExecute = false
         };
+        // Путь передаётся отдельным элементом ArgumentList (без shell-обработки),
+        // содержимое папки не выполняется — Проводник только показывает каталог.
+        psi.ArgumentList.Add(path);
 
         // Explorer возвращает ненулевой код выхода даже при успешном открытии окна,
         // поэтому допустим запуск без ожидания завершения.
-        Process.Start(psi) ?? throw new InvalidOperationException("Не удалось запустить Проводник Windows.");
+        using var explorer = Process.Start(psi)
+            ?? throw new InvalidOperationException("Не удалось запустить Проводник Windows.");
     }
 
     /// <summary>Проверяет существование каталога (локального или сетевого UNC).</summary>

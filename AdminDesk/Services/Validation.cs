@@ -1,4 +1,6 @@
+using System.IO;
 using System.Net;
+using System.Runtime.InteropServices;
 using AdminDesk.Models;
 
 namespace AdminDesk.Services;
@@ -27,9 +29,10 @@ public static class Validation
             return "Адрес слишком длинный.";
 
         // Если введено именно то, что выглядит как IPv4 — проверяем строгую корректность.
-        // IPAddress.TryParse отвергает короткие формы (например 1.2.3), поэтому добавляем
-        // проверку диапазона octet'ов вручную.
-        if (LooksLikeIpv4(address) && !IsValidIPv4(address))
+        // Особый случай: адрес из только цифр и точек, но НЕ из четырёх октетов (например «1.2.3»)
+        // — это тоже попытка ввести некорректный IP, а не DNS-имя.
+        bool allDigitsOrDots = address.All(ch => char.IsDigit(ch) || ch == '.');
+        if ((LooksLikeIpv4(address) || allDigitsOrDots) && !IsValidIPv4(address))
             return $"«{address}» похоже на IP-адрес, но не является корректным IPv4-адресом.";
 
         // Разрешённые символы для хоста: буквы, цифры, дефис, точка.
@@ -72,14 +75,23 @@ public static class Validation
             return "Путь содержит недопустимые символы.";
 
         bool isUnc = path.StartsWith(@"\\", StringComparison.Ordinal);
-        bool isLocalAbsolute = false;
-        try
+        bool isLocalAbsolute;
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            isLocalAbsolute = Path.IsPathFullyQualified(path);
+            try
+            {
+                isLocalAbsolute = Path.IsPathFullyQualified(path);
+            }
+            catch
+            {
+                isLocalAbsolute = false;
+            }
         }
-        catch
+        else
         {
-            isLocalAbsolute = false;
+            // Вне Windows (тестовая сборка Core на Linux): проверяем форму «C:\...» напрямую.
+            // Приложение поддерживается только на Windows, здесь это нужно лишь для юнит-тестов.
+            isLocalAbsolute = path.Length >= 3 && char.IsLetter(path[0]) && path[1] == ':' && (path[2] == '\\' || path[2] == '/');
         }
 
         if (!isUnc && !isLocalAbsolute)

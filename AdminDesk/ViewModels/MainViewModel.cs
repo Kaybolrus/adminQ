@@ -17,6 +17,10 @@ public class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     private readonly AvailabilityMonitor _monitor = new();
     private AppData _data;
 
+    /// <summary>Режим без сохранения: файл данных существует, но не читается или повреждён
+    /// без резервной копии. Любая запись в этом режиме запрещена (защита от молчаливой потери данных).</summary>
+    public bool IsReadOnly { get; private set; }
+
     private string _searchText = "";
     private bool _isDevicesView = true;
     private DeviceEntry? _selectedDevice;
@@ -50,6 +54,7 @@ public class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         _dataService = new DataService();
         var loadResult = _dataService.Load();
         _data = loadResult.Data;
+        IsReadOnly = loadResult.ReadOnlyMode;
 
         foreach (var d in _data.Devices) Devices.Add(d);
         foreach (var f in _data.Folders.OrderBy(f => f.Order)) Folders.Add(f);
@@ -372,6 +377,17 @@ public class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 
     private void SaveData()
     {
+        if (IsReadOnly)
+        {
+            // В режиме без сохранения любая запись в файл запрещена: иначе стартовые записи
+            // молча перезапишут данные пользователя (требование ТЗ о сохранности данных).
+            MessageBox.Show(Application.Current?.MainWindow,
+                "Данные не сохраняются: основной файл данных не читается или повреждён без резервной копии.\n" +
+                "Закройте приложение и восстановите файл вручную (копии .damaged-* находятся в каталоге %AppData%\\AdminDesk).",
+                "Режим без сохранения", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
         _data.Devices = Devices;
         _data.Folders = Folders;
 

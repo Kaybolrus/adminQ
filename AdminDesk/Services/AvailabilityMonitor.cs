@@ -94,7 +94,11 @@ public sealed class AvailabilityMonitor : IAsyncDisposable
             }
 
             // onResult marshalит обновление свойств на UI-поток (см. MainViewModel).
-            onResult(device, reachable, DateTime.Now);
+            // ct.CanBeCanceled == false — проверка завершилась до остановки приложения:
+            // фиксируем результат. Если остановка уже запрошена — окно закрывается,
+            // обновлять ничего не нужно.
+            if (!ct.CanBeCanceled)
+                onResult(device, reachable, DateTime.Now);
         }
         catch (OperationCanceledException)
         {
@@ -104,7 +108,8 @@ public sealed class AvailabilityMonitor : IAsyncDisposable
         {
             // Любая непредвиденная ошибка проверки (например, разрешение имени) трактуется как «нет ответа»,
             // но приложение не падает. Это осознанное решение: единичный сбой сети не должен закрывать программу.
-            onResult(device, false, DateTime.Now);
+            if (!ct.CanBeCanceled)
+                onResult(device, false, DateTime.Now);
         }
         finally
         {

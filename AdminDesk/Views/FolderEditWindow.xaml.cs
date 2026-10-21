@@ -38,7 +38,9 @@ public partial class FolderEditWindow : Window
     {
         _folder.IconKind = (FolderIconKind)(IconCombo.SelectedValue ?? FolderIconKind.Folder);
 
-        string? error = Validation.ValidateFolder(_folder, Enumerable.Empty<FolderEntry>());
+        // Полное имя — обязательно: в WPF-проекте System.Windows.Controls.Validation
+        // конфликтует с AdminDesk.Services.Validation (CS0104).
+        string? error = Services.Validation.ValidateFolder(_folder, Enumerable.Empty<FolderEntry>());
         if (error != null)
         {
             ErrorText.Text = error;
